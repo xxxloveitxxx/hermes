@@ -201,13 +201,15 @@ type SearchParams = {
 };
 
 function buildFilter(params: SearchParams): any {
-  // Start with minimal filter — only set fields the SPA actually sends
+  // page and count MUST be inside filter for Ouedkniss GraphQL API
   const filter: any = {
     categorySlug: params.categorySlug ?? "automobiles_vehicules",
+    page: params.page ?? 1,
+    count: params.count ?? 20,
+    orderByField: { field: "REFRESHED_AT", order: "DESC" },
   };
 
-  // Only add fields when they have meaningful values —
-  // the GraphQL server applies defaults for omitted fields
+  // Only add fields when they have meaningful values
   if (params.keywords) filter.keywords = params.keywords;
   // regionIds might need region names not slugs - debug by removing for now
   // if (params.regionIds && params.regionIds.length > 0) filter.regionIds = params.regionIds;
@@ -224,10 +226,11 @@ async function scrapeCars(params: SearchParams): Promise<{
   lastPage: number;
   hasMorePages: boolean;
 }> {
-  const variables = {
-    q: params.q ?? "",
-    filter: buildFilter(params),
-  };
+  const filter = buildFilter(params);
+  
+  const variables: any = { filter };
+  if (params.q) variables.q = params.q;
+  if (params.keywords) variables.keywords = params.keywords;
 
   const data = await fetchOuedkniss({
     operationName: "SearchQueryWithoutFilters",
