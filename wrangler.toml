@@ -1,4 +1,5 @@
 name = "yo"
+main = "./functions/index.ts"
 compatibility_date = "2026-07-10"
 
 [assets]
