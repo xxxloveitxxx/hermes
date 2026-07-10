@@ -14,7 +14,6 @@ type CarListing = {
   exchangeType: string | null;
   imageUrl: string | null;
   thumbnailUrl: string | null;
-  images: { url: string; thumbnail: string }[];
   cityName: string | null;
   regionName: string | null;
   categorySlug: string;
@@ -69,7 +68,6 @@ const SEARCH_QUERY = `query SearchQueryWithoutFilters($q: String, $filter: Searc
         }
         store { id name slug imageUrl isOfficial isVerified }
         defaultMedia(size: ORIGINAL) { mediaUrl mimeType thumbnail }
-        media(limit: 10, size: ORIGINAL) { mediaUrl mimeType thumbnail }
         smallDescription {
           specification { codename }
           valueText
@@ -173,18 +171,6 @@ function mapListing(raw: any): CarListing {
   const specs = raw.smallDescription ?? [];
   const city = raw.cities?.[0];
   const media = raw.defaultMedia;
-  
-  // Extract all images
-  const allMedia = raw.media ?? [];
-  const images = allMedia.map((m: any) => ({
-    url: m.mediaUrl ?? "",
-    thumbnail: m.thumbnail ?? m.mediaUrl ?? "",
-  }));
-  
-  // If no media array, use defaultMedia
-  if (images.length === 0 && media?.mediaUrl) {
-    images.push({ url: media.mediaUrl, thumbnail: media.thumbnail ?? media.mediaUrl });
-  }
 
   return {
     id: String(raw.id),
@@ -199,7 +185,6 @@ function mapListing(raw: any): CarListing {
     exchangeType: raw.exchangeType ?? null,
     imageUrl: media?.mediaUrl ?? null,
     thumbnailUrl: media?.thumbnail ?? media?.mediaUrl ?? null,
-    images,
     cityName: city?.name ?? null,
     regionName: city?.region?.name ?? null,
     categorySlug: raw.category?.slug ?? "automobiles",
@@ -237,7 +222,6 @@ function buildFilter(params: SearchParams): any {
     categorySlug: params.categorySlug ?? "automobiles_vehicules",
     page: params.page ?? 1,
     count: params.count ?? 20,
-    orderByField: { field: "REFRESHED_AT", order: "DESC" },
   };
 
   // Only add fields when they have meaningful values
