@@ -1,7 +1,7 @@
 // functions/index.ts — DzSwoopa backend
 // Scrapes ouedkniss.com automobile listings via their GraphQL API.
 
-export type CarListing = {
+type CarListing = {
   id: string;
   slug: string;
   title: string;
@@ -67,7 +67,7 @@ const SEARCH_QUERY = `query SearchQueryWithoutFilters($q: String, $filter: Searc
           region { id name slug }
         }
         store { id name slug imageUrl isOfficial isVerified }
-        defaultMedia { mediaUrl mimeType thumbnail }
+        defaultMedia(size: ORIGINAL) { mediaUrl mimeType thumbnail }
         smallDescription {
           specification { codename }
           valueText
@@ -77,6 +77,22 @@ const SEARCH_QUERY = `query SearchQueryWithoutFilters($q: String, $filter: Searc
     }
   }
 }`;
+
+/** Map of Algerian wilaya (region) slugs to IDs for the Ouedkniss API. */
+const REGION_SLUG_TO_ID: Record<string, number> = {
+  "alger": 1,
+  "oran": 2,
+  "constantine": 3,
+  "annaba": 4,
+  "setif": 5,
+  "blida": 6,
+  "tizi-ouzou": 7,
+  "bejaia": 8,
+  "tlemcen": 9,
+  "batna": 10,
+  "djelfa": 11,
+  "ouargla": 12,
+};
 
 /** Map of Algerian wilaya (region) IDs — slug-based, derived from ouedkniss filter data. */
 const REGION_MAP: Record<string, string> = {
@@ -114,13 +130,13 @@ async function fetchOuedkniss(body: unknown): Promise<any> {
     body: JSON.stringify(body),
   });
 
+  const text = await resp.text();
+  
   if (!resp.ok) {
-    const text = await resp.text().catch(() => "");
     console.error(`ouedkniss API error ${resp.status}: ${text.slice(0, 500)}`);
-    throw new Error(`ouedkniss API returned ${resp.status}`);
+    throw new Error(`ouedkniss API returned ${resp.status}: ${text.slice(0, 300)}`);
   }
 
-  const text = await resp.text();
   if (!text) {
     throw new Error("ouedkniss API returned empty response — likely IP-blocked");
   }
@@ -137,15 +153,18 @@ async function fetchOuedkniss(body: unknown): Promise<any> {
   }
 }
 
-function extractSpec(specs: any[], codename: string): string | null {
-  const s = specs?.find(
-    (d: any) => d?.specification?.codename === codename
-  );
-  const val = s?.valueText ?? null;
-  if (val == null) return null;
-  // valueText can be a string or an array of strings — normalize to string
-  if (Array.isArray(val)) return val.join(", ");
-  return String(val);
+function extractSpec(specs: any[], codenames: string[]): string | null {
+  for (const codename of codenames) {
+    const s = specs?.find(
+      (d: any) => d?.specification?.codename?.toLowerCase() === codename.toLowerCase()
+    );
+    if (s?.valueText != null) {
+      const val = s.valueText;
+      if (Array.isArray(val)) return val.join(", ");
+      return String(val);
+    }
+  }
+  return null;
 }
 
 function mapListing(raw: any): CarListing {
@@ -175,10 +194,10 @@ function mapListing(raw: any): CarListing {
     likeCount: raw.likeCount ?? 0,
     createdAt: raw.createdAt ?? null,
     description: raw.description ?? null,
-    year: extractSpec(specs, "year") ?? extractSpec(specs, "annee"),
-    mileage: extractSpec(specs, "mileage") ?? extractSpec(specs, "kilometrage"),
-    fuel: extractSpec(specs, "fuel") ?? extractSpec(specs, "carburant"),
-    gearbox: extractSpec(specs, "gearbox") ?? extractSpec(specs, "boite_vitesse"),
+    year: extractSpec(specs, ["year", "annee", "model_year", "voiture_annee", "annee_mise_circulation"]),
+    mileage: extractSpec(specs, ["mileage", "kilometrage", "km", "voiture_km", "kilometrage_compteur"]),
+    fuel: extractSpec(specs, ["fuel", "carburant", "carburants", "energy", "energie", "type_carburant"]),
+    gearbox: extractSpec(specs, ["gearbox", "boite_vitesse", "boite", "transmission", "type_boite"]),
     link: `https://www.ouedkniss.com/announcements/${raw.id}/${raw.slug ?? ""}`,
   };
 }
@@ -198,15 +217,24 @@ type SearchParams = {
 };
 
 function buildFilter(params: SearchParams): any {
-  // Start with minimal filter — only set fields the SPA actually sends
+  // page and count MUST be inside filter for Ouedkniss GraphQL API
   const filter: any = {
     categorySlug: params.categorySlug ?? "automobiles_vehicules",
+    page: params.page ?? 1,
+    count: params.count ?? 20,
   };
 
-  // Only add fields when they have meaningful values —
-  // the GraphQL server applies defaults for omitted fields
+  // Only add fields when they have meaningful values
   if (params.keywords) filter.keywords = params.keywords;
-  if (params.regionIds && params.regionIds.length > 0) filter.regionIds = params.regionIds;
+  
+  // Region filtering - convert slug to ID
+  if (params.regionIds && params.regionIds.length > 0) {
+    const regionId = REGION_SLUG_TO_ID[params.regionIds[0]];
+    if (regionId) {
+      filter.regionIds = [regionId];
+    }
+  }
+  
   if (params.priceMin != null || params.priceMax != null) {
     filter.priceRange = [params.priceMin ?? 0, params.priceMax ?? 999999999];
   }
@@ -220,10 +248,11 @@ async function scrapeCars(params: SearchParams): Promise<{
   lastPage: number;
   hasMorePages: boolean;
 }> {
-  const variables = {
-    q: params.q ?? "",
-    filter: buildFilter(params),
-  };
+  const filter = buildFilter(params);
+  
+  const variables: any = { filter };
+  if (params.q) variables.q = params.q;
+  if (params.keywords) variables.keywords = params.keywords;
 
   const data = await fetchOuedkniss({
     operationName: "SearchQueryWithoutFilters",
@@ -245,11 +274,16 @@ async function scrapeCars(params: SearchParams): Promise<{
 
   const cars = (result.data ?? []).map(mapListing);
   const paginator = result.paginatorInfo ?? {};
+  
+  // Calculate hasMorePages from lastPage and current page
+  const currentPage = params.page ?? 1;
+  const lastPage = paginator.lastPage ?? 1;
+  const hasMorePages = currentPage < lastPage && cars.length > 0;
 
   return {
     cars,
-    lastPage: paginator.lastPage ?? 0,
-    hasMorePages: paginator.hasMorePages ?? false,
+    lastPage,
+    hasMorePages,
   };
 }
 
@@ -290,9 +324,10 @@ export default {
         const result = await scrapeCars(params);
         return Response.json(result, { headers: CORS });
       } catch (err: any) {
-        console.error("scrapeCars error:", err.message);
+        const msg = err?.message ?? String(err);
+        console.error("scrapeCars error:", msg);
         return Response.json(
-          { error: err.message ?? "Failed to scrape listings" },
+          { error: msg },
           { status: 502, headers: CORS }
         );
       }

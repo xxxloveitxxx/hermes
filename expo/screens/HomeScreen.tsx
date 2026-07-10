@@ -1,7 +1,7 @@
 // Home screen — car listings feed with infinite scroll
 
 import { useInfiniteQuery } from "@tanstack/react-query";
-import { Heart, Search, SlidersHorizontal, TrendingUp } from "lucide-react-native";
+import { Heart, Search, SlidersHorizontal, TrendingUp, WifiOff } from "lucide-react-native";
 import { useCallback, useMemo, useState } from "react";
 import {
   ActivityIndicator,
@@ -15,11 +15,16 @@ import {
 import { CarCard } from "@/components/CarCard";
 import { FilterBar, RegionChips } from "@/components/FilterBar";
 import { FilterSheet } from "@/components/FilterSheet";
+import { SkeletonCard } from "@/components/SkeletonCard";
 import { useFavorites } from "@/lib/favorites-context";
 import { fetchCars } from "@/lib/api";
 import { theme } from "@/constants/theme";
+import { isOnline, formatErrorMessage } from "@/lib/network";
 import type { CarFilters, CarListing } from "@/types/car";
 import { DEFAULT_FILTERS } from "@/types/car";
+
+// Number of skeleton cards to show during initial load
+const SKELETON_COUNT = 6;
 
 type HomeProps = {
   onCarPress: (car: CarListing) => void;
@@ -159,25 +164,34 @@ export function HomeScreen({ onCarPress, onGoToFavorites }: HomeProps) {
     return (
       <View style={styles.stateContainer}>
         {listHeader}
-        <View style={styles.loadingBody}>
-          <ActivityIndicator size="large" color={theme.accent} />
-          <Text style={styles.loadingText}>
-            Scraping ouedkniss.com...
-          </Text>
+        <View style={styles.skeletonContainer}>
+          {Array.from({ length: SKELETON_COUNT }).map((_, i) => (
+            <SkeletonCard key={i} style={styles.skeletonCard} />
+          ))}
         </View>
       </View>
     );
   }
 
   if (isError) {
+    const offline = !isOnline();
+    
     return (
       <View style={styles.stateContainer}>
         {listHeader}
         <View style={styles.errorBody}>
-          <Text style={styles.errorEmoji}>⚠️</Text>
-          <Text style={styles.errorTitle}>Échec du scraping</Text>
+          {offline ? (
+            <WifiOff size={48} color={theme.textMuted} />
+          ) : (
+            <Text style={styles.errorEmoji}>⚠️</Text>
+          )}
+          <Text style={styles.errorTitle}>
+            {offline ? "Pas de connexion" : "Échec du chargement"}
+          </Text>
           <Text style={styles.errorMsg}>
-            {(error as Error)?.message ?? "Impossible de charger les annonces"}
+            {offline
+              ? "Vérifiez votre connexion internet et réessayez."
+              : formatErrorMessage(error)}
           </Text>
           <Pressable
             onPress={() => refetch()}
@@ -344,6 +358,15 @@ const styles = StyleSheet.create({
   columnWrapper: {
     gap: 12,
     marginBottom: 12,
+  },
+  skeletonContainer: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    paddingHorizontal: 16,
+    gap: 12,
+  },
+  skeletonCard: {
+    width: "47%",
   },
   loadingBody: {
     flex: 1,

@@ -2,7 +2,15 @@
 
 import type { CarListResponse, CarFilters, Region, SortOption } from "@/types/car";
 
-const BACKEND_URL = process.env.EXPO_PUBLIC_RORK_FUNCTIONS_URL!;
+// Backend URL - set via environment variable or defaults to same origin
+const BACKEND_URL = process.env.EXPO_PUBLIC_BACKEND_URL ?? "";
+
+// Retry configuration
+const RETRY_CONFIG = {
+  maxRetries: 3,
+  initialDelayMs: 1000,
+  maxDelayMs: 5000,
+};
 
 type FetchParams = {
   page?: number;
@@ -37,7 +45,8 @@ function filtersToParams(
 }
 
 function buildUrl(params: FetchParams): string {
-  const url = new URL(`${BACKEND_URL}/cars`);
+  const base = BACKEND_URL || (typeof window !== 'undefined' ? window.location.origin : '');
+  const url = new URL(`${base}/cars`);
   for (const [key, value] of Object.entries(params)) {
     if (value !== undefined && value !== null && value !== "") {
       url.searchParams.set(key, String(value));
@@ -54,28 +63,48 @@ export async function fetchCars(
   const params = filtersToParams(filters, page, count);
   const url = buildUrl(params);
 
-  const resp = await fetch(url);
-  if (!resp.ok) {
-    const body = await resp.text().catch(() => "");
-    throw new Error(`Failed to load listings: ${resp.status} ${body.slice(0, 200)}`);
+  let lastError: Error;
+  
+  for (let attempt = 0; attempt <= RETRY_CONFIG.maxRetries; attempt++) {
+    try {
+      const resp = await fetch(url);
+      if (!resp.ok) {
+        const body = await resp.text().catch(() => "");
+        throw new Error(`Failed to load listings: ${resp.status} ${body.slice(0, 200)}`);
+      }
+
+      const data = (await resp.json()) as CarListResponse;
+
+      // Client-side sort (API doesn't support sort param)
+      if (filters.sortBy !== "newest" && data.cars.length > 0) {
+        data.cars.sort((a, b) => {
+          const pa = a.price ?? 0;
+          const pb = b.price ?? 0;
+          return filters.sortBy === "priceLow" ? pa - pb : pb - pa;
+        });
+      }
+
+      return data;
+    } catch (error) {
+      lastError = error instanceof Error ? error : new Error(String(error));
+      
+      if (attempt < RETRY_CONFIG.maxRetries) {
+        // Exponential backoff
+        const delay = Math.min(
+          RETRY_CONFIG.initialDelayMs * Math.pow(2, attempt),
+          RETRY_CONFIG.maxDelayMs
+        );
+        await new Promise(resolve => setTimeout(resolve, delay));
+      }
+    }
   }
 
-  const data = (await resp.json()) as CarListResponse;
-
-  // Client-side sort (API doesn't support sort param)
-  if (filters.sortBy !== "newest" && data.cars.length > 0) {
-    data.cars.sort((a, b) => {
-      const pa = a.price ?? 0;
-      const pb = b.price ?? 0;
-      return filters.sortBy === "priceLow" ? pa - pb : pb - pa;
-    });
-  }
-
-  return data;
+  throw lastError!;
 }
 
 export async function fetchRegions(): Promise<Region[]> {
-  const resp = await fetch(`${BACKEND_URL}/regions`);
+  const base = BACKEND_URL || (typeof window !== 'undefined' ? window.location.origin : '');
+  const resp = await fetch(`${base}/regions`);
   if (!resp.ok) throw new Error("Failed to load regions");
   const data = (await resp.json()) as { regions: Region[] };
   return data.regions;

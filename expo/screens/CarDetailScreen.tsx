@@ -16,11 +16,13 @@ import {
   Store,
   ThumbsUp,
 } from "lucide-react-native";
-import { useCallback, useState } from "react";
+import { useCallback } from "react";
 import {
   Linking,
+  Platform,
   Pressable,
   ScrollView,
+  Share,
   StyleSheet,
   Text,
   View,
@@ -42,11 +44,24 @@ export function CarDetailScreen({ car, onBack }: Props) {
 
   const handleShare = useCallback(async () => {
     try {
-      await Linking.openURL(car.link);
+      const price = formatPrice(car.price, car.pricePreview, car.priceUnit);
+      const shareContent = `${car.title}\n${price}\n${car.cityName ? `${car.cityName}` : ""}\nVoir sur Ouedkniss: ${car.link}`;
+      
+      if (Platform.OS === "web") {
+        // Web fallback: copy to clipboard
+        await navigator.clipboard.writeText(shareContent);
+      } else {
+        await Share.share({
+          title: car.title,
+          message: shareContent,
+          url: car.link,
+        });
+      }
     } catch {
-      // Fallback: try to share via URL
+      // Fallback: open link
+      await Linking.openURL(car.link);
     }
-  }, [car.link]);
+  }, [car]);
 
   const specs = [
     { icon: Calendar, label: "Année", value: car.year },

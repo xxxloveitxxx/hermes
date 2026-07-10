@@ -4,9 +4,10 @@
   "private": true,
   "main": "expo-router/entry",
   "scripts": {
-    "start": "bunx rork start -p j4zda7qif9nf71kgnuc7m",
-    "start-web": "bunx rork start -p j4zda7qif9nf71kgnuc7m --web",
-    "start-web-dev": "DEBUG=expo* bunx rork start -p j4zda7qif9nf71kgnuc7m --web",
+    "start": "expo start",
+    "start:web": "expo start --web",
+    "export": "expo export",
+    "build:web": "expo export",
     "lint": "expo lint"
   },
   "dependencies": {
