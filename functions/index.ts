@@ -130,25 +130,13 @@ async function fetchOuedkniss(body: unknown): Promise<any> {
     body: JSON.stringify(body),
   });
 
+  const text = await resp.text();
+  
   if (!resp.ok) {
-    const text = await resp.text().catch(() => "");
     console.error(`ouedkniss API error ${resp.status}: ${text.slice(0, 500)}`);
-    // Try to parse GraphQL errors from non-200 response
-    let graphqlError: string | null = null;
-    try {
-      const parsed = JSON.parse(text);
-      if (parsed.errors && parsed.errors[0]) {
-        graphqlError = parsed.errors[0].message;
-      }
-    } catch {}
-    
-    if (graphqlError) {
-      throw new Error(`GraphQL: ${graphqlError}`);
-    }
-    throw new Error(`ouedkniss API returned ${resp.status}`);
+    throw new Error(`ouedkniss API returned ${resp.status}: ${text.slice(0, 300)}`);
   }
 
-  const text = await resp.text();
   if (!text) {
     throw new Error("ouedkniss API returned empty response — likely IP-blocked");
   }
