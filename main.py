@@ -3,7 +3,7 @@
 Ouedkniss Scraper Backend
 
 This backend provides /cars and /regions endpoints for the DzSwoopa app.
-It fetches car data from ouedkniss.com using Selenium for real scraping.
+It fetches car data from ouedkniss.com using their GraphQL API.
 
 Usage:
     python main.py                    # Start HTTP server
@@ -20,16 +20,186 @@ from aiohttp import web
 import argparse
 import random
 import time
+import requests
 
-# Try to import Selenium for real scraping
-SELENIUM_AVAILABLE = False
-try:
-    from selenium import webdriver
-    from selenium.webdriver.chrome.options import Options
-    from selenium.webdriver.chrome.service import Service
-    SELENIUM_AVAILABLE = True
-except ImportError:
-    pass
+# GraphQL API endpoint
+OUEDKNISS_API = "https://api.ouedkniss.com/graphql"
+OUEDKNISS_HEADERS = {
+    "Content-Type": "application/json",
+    "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+    "Accept": "application/json",
+    "Accept-Language": "fr-DZ,fr;q=0.9",
+    "Origin": "https://www.ouedkniss.com",
+    "Referer": "https://www.ouedkniss.com/",
+}
+
+# ============= REAL API SCRAPER =============
+
+def fetch_from_api(
+    query: str = "",
+    region: str = "",
+    page: int = 1,
+    count: int = 20,
+    price_min: int = None,
+    price_max: int = None
+) -> Optional[Dict[str, Any]]:
+    """Fetch cars from Ouedkniss GraphQL API."""
+    try:
+        # Build GraphQL query
+        graphql_query = {
+            "query": """
+            query SearchQuery($q: String, $filter: SearchFilterInput) {
+                search(q: $q, filter: $filter) {
+                    announcements {
+                        paginatorInfo {
+                            total
+                            perPage
+                            currentPage
+                            lastPage
+                        }
+                        data {
+                            id
+                            title
+                            description
+                            pricePreview
+                            priceUnit
+                            defaultMedia(size: ORIGINAL) {
+                                mediaUrl
+                                mimeType
+                                thumbnail
+                            }
+                            locations {
+                                location {
+                                    address
+                                    region {
+                                        slug
+                                        name
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+            """,
+            "variables": {
+                "filter": {
+                    "categorySlug": "automobiles_vehicules",
+                    "page": page,
+                    "count": count,
+                    "orderByField": {"field": "REFRESHED_AT", "order": "DESC"},
+                }
+            }
+        }
+        
+        # Add search query (separate from filter)
+        if query:
+            graphql_query["variables"]["q"] = query
+        
+        # Add region filter (format: "Alger-16" or just slug)
+        if region:
+            graphql_query["variables"]["filter"]["regionIds"] = [region]
+        
+        # Add price filters
+        if price_min is not None:
+            graphql_query["variables"]["filter"]["priceRange"] = [price_min, price_max] if price_max else [price_min, None]
+        elif price_max is not None:
+            graphql_query["variables"]["filter"]["priceRange"] = [None, price_max]
+        
+        # Make the request
+        response = requests.post(
+            OUEDKNISS_API,
+            json=graphql_query,
+            headers=OUEDKNISS_HEADERS,
+            timeout=30
+        )
+        
+        if response.status_code != 200:
+            print(f"API error: {response.status_code}")
+            return None
+        
+        data = response.json()
+        
+        if "errors" in data:
+            print(f"GraphQL errors: {data['errors']}")
+            return None
+        
+        search_data = data.get("data", {}).get("search", {})
+        announcements = search_data.get("announcements", {})
+        paginator = announcements.get("paginatorInfo", {})
+        cars_data = announcements.get("data", [])
+        
+        # Parse the data
+        cars = []
+        for ann in cars_data:
+            # Get price
+            price = ann.get("pricePreview", 0)
+            price_unit = ann.get("priceUnit", "")
+            # The API returns prices in a special format - multiply by 1000 to get DA
+            # e.g., 230 MILLION = 230,000 DA (about $1,700 USD for a used car)
+            if price_unit == "MILLION" and price > 0:
+                price = price * 1000
+            
+            # Get picture
+            media = ann.get("defaultMedia", {})
+            picture = media.get("mediaUrl", "") if media else ""
+            
+            # Get location
+            locations = ann.get("locations", [])
+            region_name = ""
+            region_slug = ""
+            city = ""
+            if locations:
+                loc = locations[0].get("location", {})
+                region_info = loc.get("region", {})
+                region_name = region_info.get("name", "")
+                region_slug = region_info.get("slug", "")
+                city = loc.get("address", "")
+            
+            # Parse created time (API doesn't return this, so estimate)
+            created_at = "il y a 2j"  # Default
+            
+            # Extract make from title
+            title = ann.get("title", "")
+            make = ""
+            for known_make in ["Renault", "Peugeot", "Hyundai", "Kia", "Toyota", "Volkswagen",
+                               "Dacia", "Mercedes", "BMW", "Audi", "Seat", "Skoda", "Fiat",
+                               "Nissan", "Chevrolet", "Citroën", "Ford", "Opel", "Suzuki",
+                               "Mazda", "Honda", "Mitsubishi", "Land Rover"]:
+                if known_make.lower() in title.lower():
+                    make = known_make
+                    break
+            
+            cars.append({
+                "id": str(ann.get("id", "")),
+                "title": title,
+                "price": price,
+                "priceFormatted": f"{price:,} DA".replace(",", " ") if price > 0 else "Prix non specifie",
+                "description": ann.get("description", ""),
+                "hasPictures": bool(picture),
+                "picture": picture,
+                "pictures": [picture] if picture else [],
+                "make": make,
+                "region": region_name,
+                "regionSlug": region_slug,
+                "city": city,
+                "createdAt": created_at,
+                "url": f"https://www.ouedkniss.com/announce/{ann.get('id', '')}",
+            })
+        
+        return {
+            "cars": cars,
+            "total": paginator.get("total", len(cars)),
+            "page": paginator.get("currentPage", page),
+            "perPage": paginator.get("perPage", count),
+            "lastPage": paginator.get("lastPage", 1),
+            "source": "api",
+        }
+        
+    except Exception as e:
+        print(f"API fetch error: {e}")
+        return None
+
 
 # ============= MOCK DATA =============
 
@@ -345,39 +515,45 @@ async def handle_cars(request: web.Request) -> web.Response:
     count = int(request.query.get("count", 20))
     search_query = request.query.get("q", "").strip()
     region = request.query.get("region", "").strip()
-    price_min = request.query.get("priceMin", "").strip()
-    price_max = request.query.get("priceMax", "").strip()
+    price_min_str = request.query.get("priceMin", "").strip()
+    price_max_str = request.query.get("priceMax", "").strip()
     has_pictures = request.query.get("hasPictures", "").strip().lower() == "true"
     
-    # Try real scraping first if Selenium is available
-    scraper = get_scraper()
-    if scraper and scraper.driver:
+    # Parse price filters
+    price_min = None
+    price_max = None
+    if price_min_str:
         try:
-            result = scraper.scrape_cars(search_query, region, page, count)
-            if result and len(result.get("cars", [])) > 0:
-                # Apply additional filters
-                cars = result["cars"]
-                if price_min:
-                    try:
-                        min_price = int(price_min)
-                        cars = [c for c in cars if c["price"] >= min_price]
-                    except ValueError:
-                        pass
-                if price_max:
-                    try:
-                        max_price = int(price_max)
-                        cars = [c for c in cars if c["price"] <= max_price]
-                    except ValueError:
-                        pass
-                if has_pictures:
-                    cars = [c for c in cars if c["hasPictures"]]
-                result["cars"] = cars
-                return web.json_response(result)
-        except Exception as e:
-            print(f"Scraping failed: {e}")
+            price_min = int(price_min_str)
+        except ValueError:
+            pass
+    if price_max_str:
+        try:
+            price_max = int(price_max_str)
+        except ValueError:
+            pass
     
-    # Fall back to mock data
-    print("Using mock data (Selenium not available or scraping failed)")
+    # Try real API first
+    print(f"Fetching from Ouedkniss API: q={search_query}, region={region}, page={page}")
+    result = fetch_from_api(
+        query=search_query,
+        region=region,
+        page=page,
+        count=count,
+        price_min=price_min,
+        price_max=price_max
+    )
+    
+    if result and len(result.get("cars", [])) > 0:
+        cars = result["cars"]
+        # Apply additional filters
+        if has_pictures:
+            cars = [c for c in cars if c["hasPictures"]]
+        result["cars"] = cars
+        return web.json_response(result)
+    
+    # Fall back to mock data if API fails
+    print("API failed, using mock data")
     total = 150
     cars = generate_mock_cars(count, page, search_query)
     
@@ -385,18 +561,10 @@ async def handle_cars(request: web.Request) -> web.Response:
         total = random.randint(10, 50)
     
     if price_min:
-        try:
-            min_price = int(price_min)
-            cars = [c for c in cars if c["price"] >= min_price]
-        except ValueError:
-            pass
+        cars = [c for c in cars if c["price"] >= price_min]
     
     if price_max:
-        try:
-            max_price = int(price_max)
-            cars = [c for c in cars if c["price"] <= max_price]
-        except ValueError:
-            pass
+        cars = [c for c in cars if c["price"] <= price_max]
     
     if has_pictures:
         cars = [c for c in cars if c["hasPictures"]]
