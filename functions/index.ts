@@ -133,6 +133,16 @@ async function fetchOuedkniss(body: unknown): Promise<any> {
   if (!resp.ok) {
     const text = await resp.text().catch(() => "");
     console.error(`ouedkniss API error ${resp.status}: ${text.slice(0, 500)}`);
+    // Try to parse GraphQL errors from non-200 response
+    try {
+      const parsed = JSON.parse(text);
+      if (parsed.errors) {
+        const msg = parsed.errors[0]?.message ?? "GraphQL error";
+        throw new Error(msg);
+      }
+    } catch (e) {
+      if (e instanceof Error) throw e;
+    }
     throw new Error(`ouedkniss API returned ${resp.status}`);
   }
 
