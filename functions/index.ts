@@ -38,7 +38,7 @@ const CORS = {
 
 const GRAPHQL_URL = "https://api.ouedkniss.com/graphql";
 
-const SEARCH_QUERY = `query SearchQueryWithoutFilters($q: String, $filter: SearchFilterInput, $mediaSize: MediaSize = MEDIUM) {
+const SEARCH_QUERY = `query SearchQueryWithoutFilters($q: String, $filter: SearchFilterInput) {
   search(q: $q, filter: $filter) {
     announcements {
       data {
@@ -67,7 +67,7 @@ const SEARCH_QUERY = `query SearchQueryWithoutFilters($q: String, $filter: Searc
           region { id name slug }
         }
         store { id name slug imageUrl isOfficial isVerified }
-        defaultMedia(size: $mediaSize) { mediaUrl mimeType thumbnail }
+        defaultMedia { mediaUrl mimeType thumbnail }
         smallDescription {
           specification { codename }
           valueText
@@ -200,7 +200,7 @@ type SearchParams = {
 function buildFilter(params: SearchParams): any {
   // Start with minimal filter — only set fields the SPA actually sends
   const filter: any = {
-    categorySlug: params.categorySlug ?? "automobiles",
+    categorySlug: params.categorySlug ?? "automobiles_vehicules",
   };
 
   // Only add fields when they have meaningful values —
@@ -223,7 +223,6 @@ async function scrapeCars(params: SearchParams): Promise<{
   const variables = {
     q: params.q ?? "",
     filter: buildFilter(params),
-    mediaSize: "MEDIUM",
   };
 
   const data = await fetchOuedkniss({
@@ -274,7 +273,7 @@ export default {
           count: parseInt(url.searchParams.get("count") ?? "20", 10),
           q: url.searchParams.get("q") ?? undefined,
           categorySlug:
-            url.searchParams.get("category") ?? "automobiles",
+            url.searchParams.get("category") ?? "automobiles_vehicules",
           regionIds: url.searchParams.get("region")
             ? [url.searchParams.get("region")!]
             : undefined,
