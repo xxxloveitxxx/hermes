@@ -132,16 +132,13 @@ Once the backend is deployed, you need to configure the DzSwoopa app to use it:
    - Option A: Set the `EXPO_PUBLIC_SCRAPER_URL` environment variable in your deployment
    - Option B: Modify the Cloudflare Worker to use your backend URL
 
-## Note on Data
+## Live Data
 
-The backend currently uses mock data for testing purposes. The Ouedkniss.com GraphQL API requires authentication/session cookies to return results, which makes direct scraping difficult.
-
-To enable real data scraping:
-1. Implement authentication with Ouedkniss.com
-2. Extract session cookies from a logged-in browser
-3. Add the cookies to the HTTP requests
+This backend now uses the real Ouedkniss.com GraphQL API to fetch live car data. No authentication is required.
 
 ## Files
 
-- `main.py` - Main backend server
+- `main.py` - FastAPI backend server
+- `worker.js` - Cloudflare Worker version
+- `wrangler.toml` - Cloudflare Workers configuration
 - `pyproject.toml` - Python project configuration
