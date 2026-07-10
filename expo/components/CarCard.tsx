@@ -47,6 +47,9 @@ function CarCardBase({ car, isFavorite, onToggleFavorite, onPress, style }: Card
             contentFit="cover"
             transition={200}
             recyclingKey={car.id}
+            placeholder={{ uri: car.thumbnailUrl ?? undefined }}
+            placeholderContentFit="cover"
+            blurRadius={car.thumbnailUrl ? 5 : 0}
           />
         ) : (
           <View style={styles.imagePlaceholder}>
