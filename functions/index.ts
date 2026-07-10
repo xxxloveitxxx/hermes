@@ -137,15 +137,18 @@ async function fetchOuedkniss(body: unknown): Promise<any> {
   }
 }
 
-function extractSpec(specs: any[], codename: string): string | null {
-  const s = specs?.find(
-    (d: any) => d?.specification?.codename === codename
-  );
-  const val = s?.valueText ?? null;
-  if (val == null) return null;
-  // valueText can be a string or an array of strings — normalize to string
-  if (Array.isArray(val)) return val.join(", ");
-  return String(val);
+function extractSpec(specs: any[], codenames: string[]): string | null {
+  for (const codename of codenames) {
+    const s = specs?.find(
+      (d: any) => d?.specification?.codename?.toLowerCase() === codename.toLowerCase()
+    );
+    if (s?.valueText != null) {
+      const val = s.valueText;
+      if (Array.isArray(val)) return val.join(", ");
+      return String(val);
+    }
+  }
+  return null;
 }
 
 function mapListing(raw: any): CarListing {
@@ -175,10 +178,10 @@ function mapListing(raw: any): CarListing {
     likeCount: raw.likeCount ?? 0,
     createdAt: raw.createdAt ?? null,
     description: raw.description ?? null,
-    year: extractSpec(specs, "year") ?? extractSpec(specs, "annee"),
-    mileage: extractSpec(specs, "mileage") ?? extractSpec(specs, "kilometrage"),
-    fuel: extractSpec(specs, "fuel") ?? extractSpec(specs, "carburant"),
-    gearbox: extractSpec(specs, "gearbox") ?? extractSpec(specs, "boite_vitesse"),
+    year: extractSpec(specs, ["year", "annee", "model_year", "voiture_annee"]),
+    mileage: extractSpec(specs, ["mileage", "kilometrage", "km", "voiture_km"]),
+    fuel: extractSpec(specs, ["fuel", "carburant", "carburants", "energy", "energie"]),
+    gearbox: extractSpec(specs, ["gearbox", "boite_vitesse", "boite", "transmission"]),
     link: `https://www.ouedkniss.com/announcements/${raw.id}/${raw.slug ?? ""}`,
   };
 }
@@ -206,7 +209,8 @@ function buildFilter(params: SearchParams): any {
   // Only add fields when they have meaningful values —
   // the GraphQL server applies defaults for omitted fields
   if (params.keywords) filter.keywords = params.keywords;
-  if (params.regionIds && params.regionIds.length > 0) filter.regionIds = params.regionIds;
+  // regionIds might need region names not slugs - debug by removing for now
+  // if (params.regionIds && params.regionIds.length > 0) filter.regionIds = params.regionIds;
   if (params.priceMin != null || params.priceMax != null) {
     filter.priceRange = [params.priceMin ?? 0, params.priceMax ?? 999999999];
   }
@@ -245,11 +249,16 @@ async function scrapeCars(params: SearchParams): Promise<{
 
   const cars = (result.data ?? []).map(mapListing);
   const paginator = result.paginatorInfo ?? {};
+  
+  // Calculate hasMorePages from lastPage and current page
+  const currentPage = params.page ?? 1;
+  const lastPage = paginator.lastPage ?? 1;
+  const hasMorePages = currentPage < lastPage && cars.length > 0;
 
   return {
     cars,
-    lastPage: paginator.lastPage ?? 0,
-    hasMorePages: paginator.hasMorePages ?? false,
+    lastPage,
+    hasMorePages,
   };
 }
 
