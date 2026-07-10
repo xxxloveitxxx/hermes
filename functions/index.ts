@@ -1,7 +1,7 @@
 // functions/index.ts — DzSwoopa backend
 // Scrapes ouedkniss.com automobile listings via their GraphQL API.
 
-export type CarListing = {
+type CarListing = {
   id: string;
   slug: string;
   title: string;
