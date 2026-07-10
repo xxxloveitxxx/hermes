@@ -5,16 +5,13 @@ import { LinearGradient } from "expo-linear-gradient";
 import {
   ArrowLeft,
   BadgeCheck,
-  Calendar,
   ExternalLink,
-  Fuel,
-  Gauge,
   Heart,
   MapPin,
-  Settings2,
   Share2,
   Store,
   ThumbsUp,
+  Truck,
 } from "lucide-react-native";
 import { useCallback } from "react";
 import {
@@ -63,12 +60,12 @@ export function CarDetailScreen({ car, onBack }: Props) {
     }
   }, [car]);
 
-  const specs = [
-    { icon: Calendar, label: "Année", value: car.year },
-    { icon: Gauge, label: "Kilométrage", value: car.mileage },
-    { icon: Fuel, label: "Carburant", value: car.fuel },
-    { icon: Settings2, label: "Boîte", value: car.gearbox },
-  ].filter((s) => s.value);
+  // Display tags based on available data
+  const tags = [];
+  if (car.priceType === "FIXED") tags.push("Prix fixe");
+  if (car.exchangeType === "NOT_EXCHANGEABLE") tags.push("Pas d'échange");
+  if (car.hasDelivery) tags.push("Livraison disponible");
+  if (car.storeIsOfficial) tags.push("Officiel");
 
   return (
     <ScrollView style={styles.container} showsVerticalScrollIndicator={false}>
@@ -174,26 +171,30 @@ export function CarDetailScreen({ car, onBack }: Props) {
           )}
         </View>
 
-        {/* Specs grid */}
-        {specs.length > 0 && (
+        {/* Specs grid - show tags for available data */}
+        {tags.length > 0 && (
           <View style={styles.specsGrid}>
-            {specs.map((spec, i) => {
-              const Icon = spec.icon;
-              return (
-                <View
-                  key={i}
-                  style={styles.specCard}
-                >
-                  <Icon size={20} color={theme.accent} />
-                  <Text style={styles.specLabel}>{spec.label}</Text>
-                  <Text style={styles.specValue} numberOfLines={2}>
-                    {spec.value}
-                  </Text>
-                </View>
-              );
-            })}
+            {tags.map((tag, i) => (
+              <View key={i} style={styles.specCard}>
+                {tag === "Livraison disponible" ? (
+                  <Truck size={20} color={theme.accent} />
+                ) : (
+                  <BadgeCheck size={20} color={theme.accent} />
+                )}
+                <Text style={styles.specValue} numberOfLines={2}>
+                  {tag}
+                </Text>
+              </View>
+            ))}
           </View>
         )}
+
+        {/* Note about specs */}
+        <View style={styles.specsNote}>
+          <Text style={styles.specsNoteText}>
+            Les détails complets (année, kilométrage, carburant) sont disponibles sur Ouedkniss
+          </Text>
+        </View>
 
         {/* Seller info */}
         {car.storeName && (
@@ -426,6 +427,19 @@ const styles = StyleSheet.create({
     color: theme.text,
     fontSize: 15,
     fontWeight: "700",
+  },
+  specsNote: {
+    backgroundColor: theme.card,
+    borderRadius: 10,
+    padding: 12,
+    borderWidth: 1,
+    borderColor: theme.border,
+  },
+  specsNoteText: {
+    color: theme.textMuted,
+    fontSize: 12,
+    textAlign: "center",
+    fontStyle: "italic",
   },
   sellerCard: {
     flexDirection: "row",

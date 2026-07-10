@@ -2,7 +2,7 @@
 
 import { LinearGradient } from "expo-linear-gradient";
 import { Image } from "expo-image";
-import { Heart, MapPin, Store, BadgeCheck, Fuel, Gauge, Settings2, Calendar } from "lucide-react-native";
+import { Heart, MapPin, Store, BadgeCheck } from "lucide-react-native";
 import { memo, useCallback } from "react";
 import { Pressable, StyleSheet, Text, View, type ViewStyle } from "react-native";
 import { theme } from "@/constants/theme";
@@ -101,40 +101,6 @@ function CarCardBase({ car, isFavorite, onToggleFavorite, onPress, style }: Card
         <Text style={styles.title} numberOfLines={2}>
           {car.title}
         </Text>
-
-        {/* Specs row */}
-        <View style={styles.specs}>
-          {car.year && (
-            <View style={styles.specItem}>
-              <Calendar size={12} color={theme.textMuted} />
-              <Text style={styles.specText}>{car.year}</Text>
-            </View>
-          )}
-          {car.mileage && (
-            <View style={styles.specItem}>
-              <Gauge size={12} color={theme.textMuted} />
-              <Text style={styles.specText} numberOfLines={1}>
-                {car.mileage}
-              </Text>
-            </View>
-          )}
-          {car.fuel && (
-            <View style={styles.specItem}>
-              <Fuel size={12} color={theme.textMuted} />
-              <Text style={styles.specText} numberOfLines={1}>
-                {car.fuel}
-              </Text>
-            </View>
-          )}
-          {car.gearbox && (
-            <View style={styles.specItem}>
-              <Settings2 size={12} color={theme.textMuted} />
-              <Text style={styles.specText} numberOfLines={1}>
-                {car.gearbox}
-              </Text>
-            </View>
-          )}
-        </View>
 
         {/* Footer */}
         <View style={styles.footer}>
