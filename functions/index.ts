@@ -14,6 +14,7 @@ export type CarListing = {
   exchangeType: string | null;
   imageUrl: string | null;
   thumbnailUrl: string | null;
+  images: { url: string; thumbnail: string }[];
   cityName: string | null;
   regionName: string | null;
   categorySlug: string;
@@ -67,7 +68,8 @@ const SEARCH_QUERY = `query SearchQueryWithoutFilters($q: String, $filter: Searc
           region { id name slug }
         }
         store { id name slug imageUrl isOfficial isVerified }
-        defaultMedia { mediaUrl mimeType thumbnail }
+        defaultMedia(size: ORIGINAL) { mediaUrl mimeType thumbnail }
+        media(limit: 10, size: ORIGINAL) { mediaUrl mimeType thumbnail }
         smallDescription {
           specification { codename }
           valueText
@@ -77,6 +79,22 @@ const SEARCH_QUERY = `query SearchQueryWithoutFilters($q: String, $filter: Searc
     }
   }
 }`;
+
+/** Map of Algerian wilaya (region) slugs to IDs for the Ouedkniss API. */
+const REGION_SLUG_TO_ID: Record<string, number> = {
+  "alger": 1,
+  "oran": 2,
+  "constantine": 3,
+  "annaba": 4,
+  "setif": 5,
+  "blida": 6,
+  "tizi-ouzou": 7,
+  "bejaia": 8,
+  "tlemcen": 9,
+  "batna": 10,
+  "djelfa": 11,
+  "ouargla": 12,
+};
 
 /** Map of Algerian wilaya (region) IDs — slug-based, derived from ouedkniss filter data. */
 const REGION_MAP: Record<string, string> = {
@@ -155,6 +173,18 @@ function mapListing(raw: any): CarListing {
   const specs = raw.smallDescription ?? [];
   const city = raw.cities?.[0];
   const media = raw.defaultMedia;
+  
+  // Extract all images
+  const allMedia = raw.media ?? [];
+  const images = allMedia.map((m: any) => ({
+    url: m.mediaUrl ?? "",
+    thumbnail: m.thumbnail ?? m.mediaUrl ?? "",
+  }));
+  
+  // If no media array, use defaultMedia
+  if (images.length === 0 && media?.mediaUrl) {
+    images.push({ url: media.mediaUrl, thumbnail: media.thumbnail ?? media.mediaUrl });
+  }
 
   return {
     id: String(raw.id),
@@ -169,6 +199,7 @@ function mapListing(raw: any): CarListing {
     exchangeType: raw.exchangeType ?? null,
     imageUrl: media?.mediaUrl ?? null,
     thumbnailUrl: media?.thumbnail ?? media?.mediaUrl ?? null,
+    images,
     cityName: city?.name ?? null,
     regionName: city?.region?.name ?? null,
     categorySlug: raw.category?.slug ?? "automobiles",
@@ -178,10 +209,10 @@ function mapListing(raw: any): CarListing {
     likeCount: raw.likeCount ?? 0,
     createdAt: raw.createdAt ?? null,
     description: raw.description ?? null,
-    year: extractSpec(specs, ["year", "annee", "model_year", "voiture_annee"]),
-    mileage: extractSpec(specs, ["mileage", "kilometrage", "km", "voiture_km"]),
-    fuel: extractSpec(specs, ["fuel", "carburant", "carburants", "energy", "energie"]),
-    gearbox: extractSpec(specs, ["gearbox", "boite_vitesse", "boite", "transmission"]),
+    year: extractSpec(specs, ["year", "annee", "model_year", "voiture_annee", "annee_mise_circulation"]),
+    mileage: extractSpec(specs, ["mileage", "kilometrage", "km", "voiture_km", "kilometrage_compteur"]),
+    fuel: extractSpec(specs, ["fuel", "carburant", "carburants", "energy", "energie", "type_carburant"]),
+    gearbox: extractSpec(specs, ["gearbox", "boite_vitesse", "boite", "transmission", "type_boite"]),
     link: `https://www.ouedkniss.com/announcements/${raw.id}/${raw.slug ?? ""}`,
   };
 }
@@ -211,8 +242,15 @@ function buildFilter(params: SearchParams): any {
 
   // Only add fields when they have meaningful values
   if (params.keywords) filter.keywords = params.keywords;
-  // regionIds might need region names not slugs - debug by removing for now
-  // if (params.regionIds && params.regionIds.length > 0) filter.regionIds = params.regionIds;
+  
+  // Region filtering - convert slug to ID
+  if (params.regionIds && params.regionIds.length > 0) {
+    const regionId = REGION_SLUG_TO_ID[params.regionIds[0]];
+    if (regionId) {
+      filter.regionIds = [regionId];
+    }
+  }
+  
   if (params.priceMin != null || params.priceMax != null) {
     filter.priceRange = [params.priceMin ?? 0, params.priceMax ?? 999999999];
   }

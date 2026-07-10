@@ -80,9 +80,6 @@ export function CarDetailScreen({ car, onBack }: Props) {
             style={styles.heroImage}
             contentFit="cover"
             transition={200}
-            placeholder={{ uri: car.thumbnailUrl ?? undefined }}
-            placeholderContentFit="cover"
-            blurRadius={car.thumbnailUrl ? 5 : 0}
           />
         ) : (
           <View style={[styles.heroImage, styles.heroPlaceholder]}>

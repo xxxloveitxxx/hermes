@@ -13,6 +13,7 @@ export type CarListing = {
   exchangeType: string | null;
   imageUrl: string | null;
   thumbnailUrl: string | null;
+  images: { url: string; thumbnail: string }[];
   cityName: string | null;
   regionName: string | null;
   categorySlug: string;
