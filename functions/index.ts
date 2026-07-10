@@ -324,9 +324,10 @@ export default {
         const result = await scrapeCars(params);
         return Response.json(result, { headers: CORS });
       } catch (err: any) {
-        console.error("scrapeCars error:", err.message);
+        const msg = err?.message ?? String(err);
+        console.error("scrapeCars error:", msg);
         return Response.json(
-          { error: err.message ?? "Failed to scrape listings" },
+          { error: msg },
           { status: 502, headers: CORS }
         );
       }
