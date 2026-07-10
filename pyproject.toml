@@ -1,0 +1,13 @@
+[project]
+name = "ouedkniss-scraper"
+version = "0.1.0"
+description = "Backend scraper for Ouedkniss.com car listings"
+readme = "README.md"
+requires-python = ">=3.10"
+dependencies = [
+    "aiohttp>=3.9.0",
+    "mcp>=1.0.0",
+]
+
+[project.scripts]
+ouedkniss-scraper = "main:main"
