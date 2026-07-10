@@ -3,6 +3,10 @@ node_modules
 .expo
 .rork
 
+# Expo web build output
+expo/dist
+expo/.expo
+
 # Cloudflare Functions
 functions/node_modules
 !functions/package.json

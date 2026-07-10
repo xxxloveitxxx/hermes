@@ -2,7 +2,8 @@
 
 import type { CarListResponse, CarFilters, Region, SortOption } from "@/types/car";
 
-const BACKEND_URL = process.env.EXPO_PUBLIC_RORK_FUNCTIONS_URL!;
+// Backend URL - set via environment variable or defaults to same origin
+const BACKEND_URL = process.env.EXPO_PUBLIC_BACKEND_URL ?? "";
 
 type FetchParams = {
   page?: number;
@@ -37,7 +38,8 @@ function filtersToParams(
 }
 
 function buildUrl(params: FetchParams): string {
-  const url = new URL(`${BACKEND_URL}/cars`);
+  const base = BACKEND_URL || (typeof window !== 'undefined' ? window.location.origin : '');
+  const url = new URL(`${base}/cars`);
   for (const [key, value] of Object.entries(params)) {
     if (value !== undefined && value !== null && value !== "") {
       url.searchParams.set(key, String(value));
@@ -75,7 +77,8 @@ export async function fetchCars(
 }
 
 export async function fetchRegions(): Promise<Region[]> {
-  const resp = await fetch(`${BACKEND_URL}/regions`);
+  const base = BACKEND_URL || (typeof window !== 'undefined' ? window.location.origin : '');
+  const resp = await fetch(`${base}/regions`);
   if (!resp.ok) throw new Error("Failed to load regions");
   const data = (await resp.json()) as { regions: Region[] };
   return data.regions;
