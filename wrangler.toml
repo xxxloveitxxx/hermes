@@ -1,4 +1,5 @@
-name = "yo"
+# wrangler.toml
+name = 'hermes'
 compatibility_date = "2026-07-10"
 
 [assets]
