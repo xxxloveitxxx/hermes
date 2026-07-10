@@ -5,6 +5,7 @@ type CarListing = {
   id: string;
   slug: string;
   title: string;
+  description: string | null;
   price: number | null;
   pricePreview: string | null;
   priceUnit: string | null;
@@ -12,21 +13,24 @@ type CarListing = {
   oldPricePreview: string | null;
   priceType: string | null;
   exchangeType: string | null;
+  isFromStore: boolean;
+  hasDelivery: boolean;
+  likeCount: number;
+  createdAt: string | null;
+  status: string | null;
   imageUrl: string | null;
   thumbnailUrl: string | null;
   cityName: string | null;
+  regionId: string | null;
   regionName: string | null;
-  categorySlug: string;
+  regionSlug: string | null;
+  storeId: string | null;
   storeName: string | null;
+  storeSlug: string | null;
+  storeImageUrl: string | null;
+  storeIsOfficial: boolean;
   storeVerified: boolean;
-  isFromStore: boolean;
-  likeCount: number;
-  createdAt: string | null;
-  description: string | null;
-  year: string | null;
-  mileage: string | null;
-  fuel: string | null;
-  gearbox: string | null;
+  categorySlug: string;
   link: string;
 };
 
@@ -51,17 +55,36 @@ const SEARCH_QUERY = `query SearchQuery($q: String, $filter: SearchFilterInput) 
         id
         title
         description
+        price
         pricePreview
         priceUnit
+        oldPrice
+        oldPricePreview
+        priceType
+        exchangeType
+        isFromStore
+        hasDelivery
+        likeCount
+        refreshedAt
+        status
         defaultMedia(size: ORIGINAL) {
           mediaUrl
           mimeType
           thumbnail
         }
+        store {
+          id
+          name
+          slug
+          imageUrl
+          isOfficial
+          isVerified
+        }
         locations {
           location {
             address
             region {
+              id
               slug
               name
             }
@@ -162,33 +185,44 @@ function mapListing(raw: any): CarListing {
   const media = raw.defaultMedia;
   const location = raw.locations?.[0]?.location;
   const region = location?.region;
+  const store = raw.store;
+
+  // Format price - convert to DZD
+  let price = raw.price ?? null;
+  if (price && raw.priceUnit === "MILLION" && price > 0) {
+    price = price * 1000000; // Convert million to actual DZD
+  }
 
   return {
     id: String(raw.id),
     slug: "",
     title: raw.title ?? "Sans titre",
-    price: null,
+    description: raw.description ?? null,
+    price,
     pricePreview: raw.pricePreview != null ? String(raw.pricePreview) : null,
     priceUnit: raw.priceUnit ?? null,
-    oldPrice: null,
-    oldPricePreview: null,
-    priceType: null,
-    exchangeType: null,
+    oldPrice: raw.oldPrice ?? null,
+    oldPricePreview: raw.oldPricePreview ?? null,
+    priceType: raw.priceType ?? null,
+    exchangeType: raw.exchangeType ?? null,
+    isFromStore: raw.isFromStore ?? false,
+    hasDelivery: raw.hasDelivery ?? false,
+    likeCount: raw.likeCount ?? 0,
+    createdAt: raw.refreshedAt ?? null,
+    status: raw.status ?? null,
     imageUrl: media?.mediaUrl ?? null,
     thumbnailUrl: media?.thumbnail ?? media?.mediaUrl ?? null,
     cityName: location?.address ?? null,
+    regionId: region?.id?.toString() ?? null,
     regionName: region?.name ?? null,
+    regionSlug: region?.slug ?? null,
+    storeId: store?.id ?? null,
+    storeName: store?.name ?? null,
+    storeSlug: store?.slug ?? null,
+    storeImageUrl: store?.imageUrl ?? null,
+    storeIsOfficial: store?.isOfficial ?? false,
+    storeVerified: store?.isVerified ?? false,
     categorySlug: "automobiles",
-    storeName: null,
-    storeVerified: false,
-    isFromStore: false,
-    likeCount: 0,
-    createdAt: null,
-    description: raw.description ?? null,
-    year: null,
-    mileage: null,
-    fuel: null,
-    gearbox: null,
     link: `https://www.ouedkniss.com/announcements/${raw.id}`,
   };
 }
