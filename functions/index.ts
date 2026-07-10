@@ -38,42 +38,36 @@ const CORS = {
 
 const GRAPHQL_URL = "https://api.ouedkniss.com/graphql";
 
-const SEARCH_QUERY = `query SearchQueryWithoutFilters($q: String, $filter: SearchFilterInput) {
+const SEARCH_QUERY = `query SearchQuery($q: String, $filter: SearchFilterInput) {
   search(q: $q, filter: $filter) {
     announcements {
+      paginatorInfo {
+        total
+        perPage
+        currentPage
+        lastPage
+      }
       data {
         id
         title
-        slug
-        createdAt: refreshedAt
-        isFromStore
-        hasDelivery
-        deliveryType
-        paymentMethod
-        likeCount
         description
-        status
-        price
         pricePreview
         priceUnit
-        oldPrice
-        oldPricePreview
-        priceType
-        exchangeType
-        cities {
-          id
-          name
-          slug
-          region { id name slug }
+        defaultMedia(size: ORIGINAL) {
+          mediaUrl
+          mimeType
+          thumbnail
         }
-        store { id name slug imageUrl isOfficial isVerified }
-        defaultMedia(size: ORIGINAL) { mediaUrl mimeType thumbnail }
-        smallDescription {
-          specification { codename }
-          valueText
+        locations {
+          location {
+            address
+            region {
+              slug
+              name
+            }
+          }
         }
       }
-      paginatorInfo { lastPage hasMorePages }
     }
   }
 }`;
@@ -114,14 +108,11 @@ const REGION_MAP: Record<string, string> = {
 async function fetchOuedkniss(body: unknown): Promise<any> {
   const headers: Record<string, string> = {
     "Content-Type": "application/json",
-    "Accept": "application/json, text/plain, */*",
-    "User-Agent":
-      "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+    "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+    "Accept": "application/json",
+    "Accept-Language": "fr-DZ,fr;q=0.9",
     "Origin": "https://www.ouedkniss.com",
-    "Referer": "https://www.ouedkniss.com/automobiles",
-    "Locale": "fr",
-    "Accept-Language": "fr",
-    "X-Referer": "https://www.ouedkniss.com/automobiles",
+    "Referer": "https://www.ouedkniss.com/",
   };
 
   const resp = await fetch(GRAPHQL_URL, {
@@ -168,37 +159,37 @@ function extractSpec(specs: any[], codenames: string[]): string | null {
 }
 
 function mapListing(raw: any): CarListing {
-  const specs = raw.smallDescription ?? [];
-  const city = raw.cities?.[0];
   const media = raw.defaultMedia;
+  const location = raw.locations?.[0]?.location;
+  const region = location?.region;
 
   return {
     id: String(raw.id),
-    slug: raw.slug ?? "",
+    slug: "",
     title: raw.title ?? "Sans titre",
-    price: raw.price ?? null,
+    price: null,
     pricePreview: raw.pricePreview != null ? String(raw.pricePreview) : null,
     priceUnit: raw.priceUnit ?? null,
-    oldPrice: raw.oldPrice ?? null,
-    oldPricePreview: raw.oldPricePreview ?? null,
-    priceType: raw.priceType ?? null,
-    exchangeType: raw.exchangeType ?? null,
+    oldPrice: null,
+    oldPricePreview: null,
+    priceType: null,
+    exchangeType: null,
     imageUrl: media?.mediaUrl ?? null,
     thumbnailUrl: media?.thumbnail ?? media?.mediaUrl ?? null,
-    cityName: city?.name ?? null,
-    regionName: city?.region?.name ?? null,
-    categorySlug: raw.category?.slug ?? "automobiles",
-    storeName: raw.store?.name ?? null,
-    storeVerified: raw.store?.isVerified ?? false,
-    isFromStore: raw.isFromStore ?? false,
-    likeCount: raw.likeCount ?? 0,
-    createdAt: raw.createdAt ?? null,
+    cityName: location?.address ?? null,
+    regionName: region?.name ?? null,
+    categorySlug: "automobiles",
+    storeName: null,
+    storeVerified: false,
+    isFromStore: false,
+    likeCount: 0,
+    createdAt: null,
     description: raw.description ?? null,
-    year: extractSpec(specs, ["year", "annee", "model_year", "voiture_annee", "annee_mise_circulation"]),
-    mileage: extractSpec(specs, ["mileage", "kilometrage", "km", "voiture_km", "kilometrage_compteur"]),
-    fuel: extractSpec(specs, ["fuel", "carburant", "carburants", "energy", "energie", "type_carburant"]),
-    gearbox: extractSpec(specs, ["gearbox", "boite_vitesse", "boite", "transmission", "type_boite"]),
-    link: `https://www.ouedkniss.com/announcements/${raw.id}/${raw.slug ?? ""}`,
+    year: null,
+    mileage: null,
+    fuel: null,
+    gearbox: null,
+    link: `https://www.ouedkniss.com/announcements/${raw.id}`,
   };
 }
 
@@ -217,22 +208,16 @@ type SearchParams = {
 };
 
 function buildFilter(params: SearchParams): any {
-  // page and count MUST be inside filter for Ouedkniss GraphQL API
   const filter: any = {
     categorySlug: params.categorySlug ?? "automobiles_vehicules",
     page: params.page ?? 1,
     count: params.count ?? 20,
+    orderByField: { field: "REFRESHED_AT", order: "DESC" },
   };
 
-  // Only add fields when they have meaningful values
-  if (params.keywords) filter.keywords = params.keywords;
-  
-  // Region filtering - convert slug to ID
+  // Region filtering - use slug directly
   if (params.regionIds && params.regionIds.length > 0) {
-    const regionId = REGION_SLUG_TO_ID[params.regionIds[0]];
-    if (regionId) {
-      filter.regionIds = [regionId];
-    }
+    filter.regionIds = [params.regionIds[0]];
   }
   
   if (params.priceMin != null || params.priceMax != null) {
@@ -252,10 +237,8 @@ async function scrapeCars(params: SearchParams): Promise<{
   
   const variables: any = { filter };
   if (params.q) variables.q = params.q;
-  if (params.keywords) variables.keywords = params.keywords;
 
   const data = await fetchOuedkniss({
-    operationName: "SearchQueryWithoutFilters",
     query: SEARCH_QUERY,
     variables,
   });
