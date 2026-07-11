@@ -1,3 +1,13 @@
+# Hermes Agent Integration
+
+This project is actively managed by **Hermes Agent** using **Mistral AI** (Mistral Large 2407).
+
+- **Automation**: OpenHands CLI is integrated for code refactoring, error handling, and feature additions.
+- **Model**: `mistral/mistral-large-2407`
+- **GitHub**: [xxxloveitxxx/hermes/tree/yo-app](https://github.com/xxxloveitxxx/hermes/tree/yo-app)
+
+---
+
 # Welcome to your Rork app
 
 ## Project info
